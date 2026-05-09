@@ -1,0 +1,12 @@
+const express=require("express") 
+const router=express.Router();
+
+
+const {addEntry,getCustomerLedger,downloadLedgerPDF}=require("../controllers/ledgerController")
+
+
+router.post("/add",addEntry);
+router.get("/:customerId",getCustomerLedger)
+router.get("/pdf/:customerId", downloadLedgerPDF);
+
+module.exports=router;
