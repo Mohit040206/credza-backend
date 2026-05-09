@@ -134,6 +134,63 @@ exports.getCustomerLedger = async (req, res) => {
 };
 
 
+exports.sendWhatsAppLink = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+
+        const customer = await Customer.findById(customerId);
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer not found"
+            });
+        }
+
+        const entries = await Ledger.find({ customerId });
+
+        let totalCredit = 0;
+        let totalDebit = 0;
+
+        entries.forEach(e => {
+            if (e.type === "credit") totalCredit += e.totalAmount;
+            else totalDebit += e.totalAmount;
+        });
+
+        const balance = totalCredit - totalDebit;
+
+        // 📩 Message
+        const message = `
+Hello ${customer.name},
+
+Your ledger summary for this month:
+
+Total Credit: ₹${totalCredit}
+Total Debit: ₹${totalDebit}
+Balance: ₹${balance}
+
+Download full statement:
+http://localhost:5000/api/ledger/pdf/${customerId}
+
+- Credza
+`;
+
+        const encodedMessage = encodeURIComponent(message);
+
+        const whatsappLink = `https://wa.me/91${customer.phone}?text=${encodedMessage}`;
+
+        res.status(200).json({
+            success: true,
+            link: whatsappLink
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
 
 
 
