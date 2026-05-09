@@ -169,7 +169,7 @@ Total Debit: ₹${totalDebit}
 Balance: ₹${balance}
 
 Download full statement:
-http://localhost:5000/api/ledger/pdf/${customerId}
+https://credza-backend.onrender.com/api/ledger/pdf/${customerId}
 
 - Credza
 `;
