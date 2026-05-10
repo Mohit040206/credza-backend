@@ -2,6 +2,7 @@ const Ledger = require("../models/Ledger");
 const Customer = require("../models/Customer");
 const generatePDF = require("../utils/pdfGenerator");
 const { logError } = require("../utils/logger");
+const Owner = require("../models/Owner");
 
 /**
  * Add Entry (Credit / Debit)
@@ -108,7 +109,8 @@ exports.getCustomerLedger = async (req, res) => {
     const { customerId } = req.params;
     const ownerId = req.user.id;
 
-    // Ownership validation
+    const { startDate, endDate } = req.query;
+
     const customer = await Customer.findOne({
       _id: customerId,
       ownerId,
@@ -121,9 +123,27 @@ exports.getCustomerLedger = async (req, res) => {
       });
     }
 
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      dateFilter = {
+        createdAt: {
+          $gte: start,
+          $lte: end,
+        },
+      };
+    }
+
     const entries = await Ledger.find({
       customerId,
       ownerId,
+      ...dateFilter,
     }).sort({ createdAt: 1 });
 
     let balance = 0;
@@ -164,6 +184,7 @@ exports.sendWhatsAppLink = async (req, res) => {
   try {
     const { customerId } = req.params;
     const ownerId = req.user.id;
+    const { startDate, endDate } = req.query;
 
     // Ownership validation
     const customer = await Customer.findOne({
@@ -177,11 +198,35 @@ exports.sendWhatsAppLink = async (req, res) => {
         message: "Customer not found for this owner",
       });
     }
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      dateFilter = {
+        createdAt: {
+          $gte: start,
+          $lte: end,
+        },
+      };
+    }
 
     const entries = await Ledger.find({
       customerId,
       ownerId,
+      ...dateFilter,
     });
+
+    if (!entries.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No transactions found for selected date range",
+      });
+    }
 
     let totalCredit = 0;
     let totalDebit = 0;
@@ -193,17 +238,19 @@ exports.sendWhatsAppLink = async (req, res) => {
 
     const balance = totalCredit - totalDebit;
 
+    const pdfLink = `https://credza-backend.onrender.com/api/ledger/pdf/${customerId}?startDate=${startDate}&endDate=${endDate}`;
+
     const message = `
 Hello ${customer.name},
 
 Your ledger summary:
 
-Total Credit: ₹${totalCredit}
-Total Debit: ₹${totalDebit}
-Balance: ₹${balance}
+Total Credit: ₹${totalCredit.toLocaleString("en-IN")}
+Total Debit: ₹${totalDebit.toLocaleString("en-IN")}
+Balance: ₹${balance.toLocaleString("en-IN")}
 
 Download full statement:
-https://credza-backend.onrender.com/api/ledger/pdf/${customerId}
+${pdfLink}
 
 - Credza
 `;
@@ -231,8 +278,8 @@ exports.downloadLedgerPDF = async (req, res) => {
   try {
     const { customerId } = req.params;
     const ownerId = req.user.id;
+    const { startDate, endDate } = req.query;
 
-    // Ownership validation
     const customer = await Customer.findOne({
       _id: customerId,
       ownerId,
@@ -244,11 +291,35 @@ exports.downloadLedgerPDF = async (req, res) => {
         message: "Customer not found for this owner",
       });
     }
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      dateFilter = {
+        createdAt: {
+          $gte: start,
+          $lte: end,
+        },
+      };
+    }
 
     const entries = await Ledger.find({
       customerId,
       ownerId,
+      ...dateFilter,
     }).sort({ createdAt: 1 });
+
+    if (!entries.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No transactions found for selected date range",
+      });
+    }
 
     let totalCredit = 0;
     let totalDebit = 0;
@@ -275,7 +346,9 @@ exports.downloadLedgerPDF = async (req, res) => {
       balance,
     };
 
-    generatePDF(customer, updatedEntries, summary, res);
+    const owner = await Owner.findById(ownerId);
+
+    generatePDF(customer, updatedEntries, summary, res, owner);
   } catch (err) {
     logError(err);
     return res.status(500).json({

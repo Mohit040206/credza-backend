@@ -8,7 +8,10 @@ const mainroutes=require("./src/routes/mainRoutes")
 
 const app=express();
 
-app.use(cors());
+app.use(cors(
+    "http://localhost:5173",
+    "https://localhost:5173"
+));
 
 app.use(express.json());
 
