@@ -1,8 +1,11 @@
 const Customer=require("../models/Customer")
+const { logError } = require("../utils/logger");
+
 
 
 exports.addCustomer=async(req,res)=>{
     try{
+        const ownerId=req.user.id;
         const{name,phone,location}=req.body;
         console.log("Incoming:", req.body);
 
@@ -24,7 +27,8 @@ const cleanPhone = phone?.trim();
         const customer=new Customer({
             name,
             phone:cleanPhone,
-            location
+            location,
+            ownerId
         })
         await customer.save();
 
@@ -34,6 +38,7 @@ const cleanPhone = phone?.trim();
             data:customer
         })
     }catch(err){
+            logError(err);
 return res.status(500).json({
     success:false,
     message:err.message,

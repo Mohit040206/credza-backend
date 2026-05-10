@@ -33,7 +33,12 @@ const ledgerSchema = new mongoose.Schema({
         required: true
     },
 
-    note: String
+    note: String,
+    ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Owner",
+    required: true
+}
 
 }, {
     timestamps: true

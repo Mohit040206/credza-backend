@@ -16,7 +16,12 @@ const customerSchema=new mongoose.Schema({
     },
     location:{
         type:String,
-    }
+    },
+    ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Owner",
+    required: true
+}
 },{ timestamps: true })
 
 module.exports = mongoose.model("Customer", customerSchema);
