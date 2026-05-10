@@ -1,11 +1,16 @@
-const express=require("express") 
-const router=express.Router();
+const express = require("express");
+const router = express.Router();
 
-const {verifyToken}=require("../middlewares/authMiddleware")
+const { verifyToken } = require("../middlewares/authMiddleware");
 
-const {addCustomer}=require("../controllers/customerController")
+const {
+  addCustomer,
+  getOwnerCustomer,
+  updateCustomer
+} = require("../controllers/customerController");
 
+router.post("/add", verifyToken, addCustomer);
+router.get("/get", verifyToken, getOwnerCustomer);
+router.put("/:id", verifyToken, updateCustomer);
 
-router.post("/add",verifyToken,addCustomer);
-
-module.exports=router;
+module.exports = router;
