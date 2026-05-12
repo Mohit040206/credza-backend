@@ -12,6 +12,11 @@ const productSchema = new mongoose.Schema({
     price: {
         type: Number,
         required: true
+    },
+    unit: {
+        type: String,
+        enum: ["piece", "kg", "gram", "liter"],
+        default: "piece"
     }
 });
 

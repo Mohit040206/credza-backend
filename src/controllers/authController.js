@@ -73,7 +73,8 @@ exports.login= async (req,res)=>{
     return res.status(200).json({
         success:true,
         message:"Logged in successfully",
-        token
+        token,
+        shopName: owner.shopName
     })
 }catch(err){
         logError(err);
@@ -83,3 +84,16 @@ exports.login= async (req,res)=>{
     })
 }
 }
+
+exports.getMe = async (req, res) => {
+    try {
+        const owner = await Owner.findById(req.user.id).select('-password');
+        if (!owner) {
+            return res.status(404).json({ success: false, message: "Owner not found" });
+        }
+        return res.status(200).json({ success: true, data: owner });
+    } catch (err) {
+        logError(err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
