@@ -1,11 +1,19 @@
 const PDFDocument = require("pdfkit");
 
-// 💰 Format currency (Indian style)
-const formatCurrency = (amount) => {
-  return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+// ================= CLEAN NUMBER =================
+const cleanNumber = (val) => {
+  return Number(String(val || 0).replace(/[^0-9.-]/g, ""));
 };
 
-// Get unit label for display
+// ================= FORMAT CURRENCY =================
+const formatCurrency = (amount) => {
+  const num = cleanNumber(amount);
+  const isNegative = num < 0;
+  const absNum = Math.abs(num);
+  return `${isNegative ? "-" : ""}₹${absNum.toLocaleString("en-IN")}`;
+};
+
+// ================= UNIT HELPERS =================
 const getUnitLabel = (unit) => {
   const labels = {
     piece: "pc",
@@ -16,21 +24,26 @@ const getUnitLabel = (unit) => {
   return labels[unit] || "pc";
 };
 
-// Format unit price string (e.g., ₹5000/pc, ₹70/g)
 const formatUnitPrice = (price, unit) => {
   return `${formatCurrency(price)}/${getUnitLabel(unit)}`;
 };
 
-// Format quantity with unit (e.g., 2 pcs, 10 g)
 const formatQuantity = (qty, unit) => {
-  const unitLabel = getUnitLabel(unit);
-  return `${qty} ${unitLabel}`;
+  return `${cleanNumber(qty)} ${getUnitLabel(unit)}`;
 };
 
+// ================= MAIN FUNCTION =================
 const generatePDF = (customer, entries, summary, res, owner) => {
   const doc = new PDFDocument({ margin: 40 });
+  
+  // Register font to support Rupee symbol (Windows path)
+  try {
+    doc.font("C:\\Windows\\Fonts\\Arial.ttf");
+  } catch (err) {
+    console.warn("Arial font not found, falling back to Helvetica");
+    doc.font("Helvetica");
+  }
 
-  // Headers
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
@@ -39,31 +52,44 @@ const generatePDF = (customer, entries, summary, res, owner) => {
 
   doc.pipe(res);
 
-  // ===== HEADER BACKGROUND =====
-  doc.rect(0, 0, 612, 90).fill("#eef4ff");
+  // ================= HEADER (DYNAMIC HEIGHT) =================
 
-  // ===== BRAND =====
+  const headerStartY = 50;
+
+  // Write first to calculate height
+  doc
+    .fontSize(10)
+    .text(owner?.shopName || "Credza User", 40, headerStartY)
+    .text(owner?.name || "")
+    .text(owner?.phone || "")
+    .text(owner?.location || "");
+
+  const headerEndY = doc.y + 10;
+
+  // Background
+  doc.rect(0, 0, 612, headerEndY).fill("#eef4ff");
+
+  // Rewrite content
   doc
     .fillColor("#2563eb")
     .fontSize(20)
-    .text("Credza", 40, 35);
+    .text("Credza", 40, 20);
 
-  // ===== SHOP DETAILS =====
   doc
     .fillColor("black")
     .fontSize(10)
-    .text(owner?.shopName || "Credza User", 40, 55)
+    .text(owner?.shopName || "Credza User", 40, headerStartY)
     .text(owner?.name || "")
-    .text(owner?.phone || "");
+    .text(owner?.phone || "")
+    .text(owner?.location || "");
 
-  doc.moveDown(3);
+  doc.y = headerEndY + 20;
 
-  // ===== CUSTOMER BOX =====
+  // ================= CUSTOMER BOX =================
+
   const customerTop = doc.y;
 
-  doc
-    .roundedRect(40, customerTop, 520, 70, 6)
-    .stroke("#d1d5db");
+  doc.roundedRect(40, customerTop, 520, 70, 6).stroke("#d1d5db");
 
   doc
     .fontSize(12)
@@ -77,19 +103,17 @@ const generatePDF = (customer, entries, summary, res, owner) => {
 
   doc.moveDown(4);
 
-  // ===== ENTRIES =====
+  // ================= ENTRIES =================
+
   entries.forEach((entry) => {
-    // Check if we need a new page (leave room for content)
-    if (doc.y > 650) {
-      doc.addPage();
-    }
+    if (doc.y > 650) doc.addPage();
 
     const entryDate = new Date(entry.createdAt).toLocaleDateString("en-IN");
     const typeLabel = entry.type.toUpperCase();
     const typeColor = entry.type === "credit" ? "#dc2626" : "#16a34a";
 
-    // ===== ENTRY HEADER =====
     const entryHeaderY = doc.y;
+
     doc.rect(40, entryHeaderY, 520, 20).fill("#f0f4ff");
 
     doc
@@ -104,9 +128,10 @@ const generatePDF = (customer, entries, summary, res, owner) => {
 
     doc.moveDown(0.5);
 
-    if (entry.type === "credit" && entry.products && entry.products.length > 0) {
-      // ===== PRODUCT TABLE HEADER =====
+    // ================= CREDIT =================
+    if (entry.type === "credit" && entry.products?.length > 0) {
       const tableHeaderY = doc.y;
+
       doc.rect(40, tableHeaderY, 520, 18).fill("#f3f4f6");
 
       doc
@@ -119,18 +144,15 @@ const generatePDF = (customer, entries, summary, res, owner) => {
 
       doc.moveDown(0.3);
 
-      // ===== PRODUCT ROWS =====
-      let entryTotal = 0;
-
       entry.products.forEach((p) => {
-        if (doc.y > 700) {
-          doc.addPage();
-        }
+        if (doc.y > 700) doc.addPage();
 
         const rowY = doc.y;
         const unit = p.unit || "piece";
-        const lineTotal = p.qty * p.price;
-        entryTotal += lineTotal;
+
+        const price = cleanNumber(p.price);
+        const qty = cleanNumber(p.qty);
+        const lineTotal = price * qty;
 
         doc
           .fillColor("#111827")
@@ -140,8 +162,8 @@ const generatePDF = (customer, entries, summary, res, owner) => {
         doc
           .fillColor("#4b5563")
           .fontSize(9)
-          .text(formatUnitPrice(p.price, unit), 220, rowY, { width: 80, align: "right" })
-          .text(formatQuantity(p.qty, unit), 320, rowY, { width: 70, align: "right" });
+          .text(formatUnitPrice(price, unit), 220, rowY, { width: 80, align: "right" })
+          .text(formatQuantity(qty, unit), 320, rowY, { width: 70, align: "right" });
 
         doc
           .fillColor("#111827")
@@ -151,29 +173,25 @@ const generatePDF = (customer, entries, summary, res, owner) => {
         doc.moveDown(0.4);
       });
 
-      // ===== ENTRY TOTAL ROW =====
       const totalRowY = doc.y;
-      doc
-        .moveTo(40, totalRowY)
-        .lineTo(560, totalRowY)
-        .strokeColor("#d1d5db")
-        .stroke();
+
+      doc.moveTo(40, totalRowY).lineTo(560, totalRowY).stroke("#d1d5db");
 
       doc.moveDown(0.2);
-      const totalY = doc.y;
 
-      doc
-        .fillColor("#111827")
-        .fontSize(10)
-        .text("Entry Total", 50, totalY, { continued: false });
+      doc.fillColor("#111827").fontSize(10).text("Entry Total", 50);
 
       doc
         .fontSize(11)
-        .text(formatCurrency(entry.totalAmount), 420, totalY, { width: 80, align: "right" });
+        .text(formatCurrency(entry.totalAmount), 420, doc.y - 12, {
+          width: 80,
+          align: "right",
+        });
 
     } else {
-      // ===== DEBIT (PAYMENT) ROW =====
+      // ================= DEBIT =================
       const paymentY = doc.y;
+
       doc
         .fillColor("#16a34a")
         .fontSize(10)
@@ -182,10 +200,13 @@ const generatePDF = (customer, entries, summary, res, owner) => {
       doc
         .fillColor("#111827")
         .fontSize(11)
-        .text(formatCurrency(entry.totalAmount), 420, paymentY, { width: 80, align: "right" });
+        .text(formatCurrency(entry.totalAmount), 420, paymentY, {
+          width: 80,
+          align: "right",
+        });
     }
 
-    // Note
+    // ================= NOTE =================
     if (entry.note) {
       doc.moveDown(0.3);
       doc
@@ -194,38 +215,36 @@ const generatePDF = (customer, entries, summary, res, owner) => {
         .text(`Note: ${entry.note}`, 50);
     }
 
-    // Running balance
+    // ================= BALANCE =================
     doc.moveDown(0.3);
-    const balY = doc.y;
+
     doc
       .fillColor("#6b7280")
       .fontSize(9)
-      .text(`Running Balance: ${formatCurrency(entry.runningBalance)}`, 380, balY, { width: 120, align: "right" });
+      .text(
+        `Running Balance: ${formatCurrency(entry.runningBalance)}`,
+        380,
+        doc.y,
+        { width: 120, align: "right" }
+      );
 
     doc.moveDown(1.5);
 
-    // Separator line between entries
     doc
       .moveTo(40, doc.y - 5)
       .lineTo(560, doc.y - 5)
-      .strokeColor("#e5e7eb")
-      .stroke();
+      .stroke("#e5e7eb");
 
     doc.moveDown(0.5);
   });
 
-  doc.moveDown(2);
+  // ================= SUMMARY =================
 
-  // ===== SUMMARY BOX =====
-  if (doc.y > 650) {
-    doc.addPage();
-  }
+  if (doc.y > 650) doc.addPage();
 
   const summaryY = doc.y;
 
-  doc
-    .roundedRect(350, summaryY, 210, 90, 6)
-    .stroke("#d1d5db");
+  doc.roundedRect(350, summaryY, 210, 90, 6).stroke("#d1d5db");
 
   doc
     .fillColor("#111827")
@@ -240,7 +259,8 @@ const generatePDF = (customer, entries, summary, res, owner) => {
 
   doc.moveDown(5);
 
-  // ===== FOOTER =====
+  // ================= FOOTER =================
+
   doc
     .fontSize(10)
     .fillColor("gray")

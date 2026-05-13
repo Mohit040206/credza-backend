@@ -357,3 +357,35 @@ exports.downloadLedgerPDF = async (req, res) => {
     });
   }
 };
+
+/**
+ * Delete Entry
+ */
+exports.deleteEntry = async (req, res) => {
+  try {
+    const { entryId } = req.params;
+    const ownerId = req.user.id;
+
+    const entry = await Ledger.findOne({ _id: entryId, ownerId });
+
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: "Entry not found or unauthorized",
+      });
+    }
+
+    await Ledger.findByIdAndDelete(entryId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Entry deleted successfully",
+    });
+  } catch (err) {
+    logError(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
